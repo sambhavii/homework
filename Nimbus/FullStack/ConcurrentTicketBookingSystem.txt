@@ -1,106 +1,125 @@
 // Title: Concurrent Ticket Booking System with Seat Locking and Confirmation
-// Objective: To implement a ticket booking system that handles concurrent requests safely using a seat locking mechanism.
+// Objective: Implement a ticket booking system in Node.js that handles concurrent requests safely using a seat locking mechanism.
 
+// --- 1. SETUP ---
+// Import the Express framework
 const express = require('express');
+
+// Create an instance of the Express application
 const app = express();
-const port = 3000;
 
-// --- In-Memory Data Store ---
-// Using a JavaScript object to store the state of each seat.
-// In a real application, this would be a database (like Redis or a SQL DB).
+// Define the port the server will run on
+const port = 3002;
+
+// --- 2. IN-MEMORY DATA STORE ---
+// We'll use a simple JavaScript object to act as our database.
+// The keys will be the seat numbers (e.g., '1', '2').
+// The values will be objects containing the seat's status and other details.
 const seats = {};
-const TOTAL_SEATS = 20; // Let's create 20 seats for this theater
-const LOCK_TIMEOUT = 60 * 1000; // Lock expires after 1 minute (60,000 milliseconds)
 
-// Initialize all seats with an 'available' status
+// --- 3. CONFIGURATION ---
+const TOTAL_SEATS = 20; // The total number of seats in the theater.
+const LOCK_TIMEOUT = 60 * 1000; // 1 minute (in milliseconds). A lock will automatically expire after this time.
+
+// --- 4. INITIALIZE SEATS ---
+// This loop runs once when the server starts to create all the seats
+// and set their initial status to 'available'.
 for (let i = 1; i <= TOTAL_SEATS; i++) {
-  seats[i] = { status: 'available' };
+  seats[i] = {
+    status: 'available', // Can be 'available', 'locked', or 'booked'
+    lockTimer: null      // Will hold the timer that releases the lock
+  };
 }
 
-// --- API Endpoints ---
+// --- 5. API ENDPOINTS (ROUTES) ---
 
 /**
  * @route   GET /seats
- * @desc    Gets the current status of all seats.
+ * @desc    Get the current status of all seats.
  * @access  Public
  */
 app.get('/seats', (req, res) => {
+  // Return the entire seats object as a JSON response.
   res.status(200).json(seats);
 });
 
 /**
  * @route   POST /lock/:id
- * @desc    Temporarily locks a seat for booking.
+ * @desc    Temporarily lock a specific seat for a user to book.
  * @access  Public
  */
 app.post('/lock/:id', (req, res) => {
   const seatId = req.params.id;
   const seat = seats[seatId];
 
-  // Validate if the seat exists
+  // Error handling: Check if the seat number is valid.
   if (!seat) {
-    return res.status(404).json({ message: 'Seat not found' });
+    return res.status(404).json({ message: 'Seat not found.' });
   }
 
-  // Check if the seat is available to be locked
+  // Check if the seat is available to be locked.
   if (seat.status !== 'available') {
-    return res.status(400).json({ message: `Seat ${seatId} is not available for locking. Current status: ${seat.status}` });
+    return res.status(400).json({ message: `Seat ${seatId} is already ${seat.status} and cannot be locked.` });
   }
 
-  // --- Critical Section: Lock the seat ---
+  // --- Lock the Seat ---
   seat.status = 'locked';
 
-  // Set a timer to automatically release the lock if not confirmed
+  // Set a timeout. If the user doesn't confirm within the LOCK_TIMEOUT period,
+  // the seat will become 'available' again.
   const timer = setTimeout(() => {
-    // This check is crucial: only release the lock if it's still 'locked'.
-    // It prevents releasing a seat that has already been successfully 'booked'.
+    // This check is important! Only make the seat available if it's still 'locked'.
+    // If it was 'booked' in the meantime, we don't want to touch it.
     if (seats[seatId].status === 'locked') {
       seats[seatId].status = 'available';
-      delete seats[seatId].lockTimer; // Clean up the timer property
-      console.log(`Seat ${seatId} lock expired and is now available.`);
+      seats[seatId].lockTimer = null; // Clear the timer reference
+      console.log(`Lock for seat ${seatId} expired. Seat is now available.`);
     }
   }, LOCK_TIMEOUT);
 
-  // Store the timer ID on the seat object so we can cancel it upon confirmation
+  // Store the timer on the seat object so we can cancel it if the user confirms.
   seat.lockTimer = timer;
 
-  res.status(200).json({
-    message: `Seat ${seatId} locked successfully. Confirm within 1 minute.`
-  });
+  // Send a success response.
+  res.status(200).json({ message: `Seat ${seatId} locked successfully. Please confirm within 1 minute.` });
 });
 
 /**
  * @route   POST /confirm/:id
- * @desc    Confirms the booking for a previously locked seat.
+ * @desc    Confirm the booking for a seat that was previously locked.
  * @access  Public
  */
 app.post('/confirm/:id', (req, res) => {
   const seatId = req.params.id;
   const seat = seats[seatId];
 
-  // Validate if the seat exists
+  // Error handling: Check if the seat number is valid.
   if (!seat) {
-    return res.status(404).json({ message: 'Seat not found' });
+    return res.status(404).json({ message: 'Seat not found.' });
   }
 
-  // Only allow confirmation if the seat is currently locked
+  // A user can only confirm a booking for a seat that is currently 'locked'.
   if (seat.status !== 'locked') {
-    return res.status(400).json({ message: 'Seat is not locked and cannot be booked' });
+    return res.status(400).json({ message: `Seat ${seatId} cannot be booked. It is not currently locked.` });
   }
 
-  // --- Critical Section: Confirm the booking ---
+  // --- Confirm the Booking ---
   seat.status = 'booked';
-  
-  // The booking is confirmed, so we must cancel the automatic lock-release timer.
-  clearTimeout(seat.lockTimer);
-  delete seat.lockTimer; // Clean up the timer property
 
-  res.status(200).json({
-    message: `Seat ${seatId} booked successfully!`
-  });
+  // The seat is now permanently booked, so we must cancel the automatic lock-release timer.
+  clearTimeout(seat.lockTimer);
+  seat.lockTimer = null; // Clear the timer reference
+
+  // Send a success response.
+  res.status(200).json({ message: `Seat ${seatId} has been successfully booked!` });
 });
 
-// --- Start the Express Server ---
+
+// --- 6. START THE SERVER ---
+// This tells our app to listen for incoming requests on the specified port.
 app.listen(port, () => {
   console.log(`Ticket booking server is running on http://localhost:${port}`);
+  console.log(`There are ${TOTAL_SEATS} seats initialized.`);
 });
+
+
