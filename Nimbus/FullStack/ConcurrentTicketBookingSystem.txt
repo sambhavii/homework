@@ -1,0 +1,106 @@
+// Title: Concurrent Ticket Booking System with Seat Locking and Confirmation
+// Objective: To implement a ticket booking system that handles concurrent requests safely using a seat locking mechanism.
+
+const express = require('express');
+const app = express();
+const port = 3000;
+
+// --- In-Memory Data Store ---
+// Using a JavaScript object to store the state of each seat.
+// In a real application, this would be a database (like Redis or a SQL DB).
+const seats = {};
+const TOTAL_SEATS = 20; // Let's create 20 seats for this theater
+const LOCK_TIMEOUT = 60 * 1000; // Lock expires after 1 minute (60,000 milliseconds)
+
+// Initialize all seats with an 'available' status
+for (let i = 1; i <= TOTAL_SEATS; i++) {
+  seats[i] = { status: 'available' };
+}
+
+// --- API Endpoints ---
+
+/**
+ * @route   GET /seats
+ * @desc    Gets the current status of all seats.
+ * @access  Public
+ */
+app.get('/seats', (req, res) => {
+  res.status(200).json(seats);
+});
+
+/**
+ * @route   POST /lock/:id
+ * @desc    Temporarily locks a seat for booking.
+ * @access  Public
+ */
+app.post('/lock/:id', (req, res) => {
+  const seatId = req.params.id;
+  const seat = seats[seatId];
+
+  // Validate if the seat exists
+  if (!seat) {
+    return res.status(404).json({ message: 'Seat not found' });
+  }
+
+  // Check if the seat is available to be locked
+  if (seat.status !== 'available') {
+    return res.status(400).json({ message: `Seat ${seatId} is not available for locking. Current status: ${seat.status}` });
+  }
+
+  // --- Critical Section: Lock the seat ---
+  seat.status = 'locked';
+
+  // Set a timer to automatically release the lock if not confirmed
+  const timer = setTimeout(() => {
+    // This check is crucial: only release the lock if it's still 'locked'.
+    // It prevents releasing a seat that has already been successfully 'booked'.
+    if (seats[seatId].status === 'locked') {
+      seats[seatId].status = 'available';
+      delete seats[seatId].lockTimer; // Clean up the timer property
+      console.log(`Seat ${seatId} lock expired and is now available.`);
+    }
+  }, LOCK_TIMEOUT);
+
+  // Store the timer ID on the seat object so we can cancel it upon confirmation
+  seat.lockTimer = timer;
+
+  res.status(200).json({
+    message: `Seat ${seatId} locked successfully. Confirm within 1 minute.`
+  });
+});
+
+/**
+ * @route   POST /confirm/:id
+ * @desc    Confirms the booking for a previously locked seat.
+ * @access  Public
+ */
+app.post('/confirm/:id', (req, res) => {
+  const seatId = req.params.id;
+  const seat = seats[seatId];
+
+  // Validate if the seat exists
+  if (!seat) {
+    return res.status(404).json({ message: 'Seat not found' });
+  }
+
+  // Only allow confirmation if the seat is currently locked
+  if (seat.status !== 'locked') {
+    return res.status(400).json({ message: 'Seat is not locked and cannot be booked' });
+  }
+
+  // --- Critical Section: Confirm the booking ---
+  seat.status = 'booked';
+  
+  // The booking is confirmed, so we must cancel the automatic lock-release timer.
+  clearTimeout(seat.lockTimer);
+  delete seat.lockTimer; // Clean up the timer property
+
+  res.status(200).json({
+    message: `Seat ${seatId} booked successfully!`
+  });
+});
+
+// --- Start the Express Server ---
+app.listen(port, () => {
+  console.log(`Ticket booking server is running on http://localhost:${port}`);
+});
