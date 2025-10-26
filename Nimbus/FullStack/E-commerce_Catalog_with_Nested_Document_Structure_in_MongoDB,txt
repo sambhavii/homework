@@ -1,0 +1,44 @@
+db.products.insertMany([
+  // Running Shoes example (from 111111.png)
+  {
+    "name": "Running Shoes",
+    "price": 120,
+    "category": "Footwear",
+    "variants": [
+      { "color": "Red", "size": "M", "stock": 10 },
+      { "color": "Blue", "size": "L", "stock": 5 }
+    ]
+  },
+  // Smartphone example (from 8 (2).png)
+  {
+    "name": "Smartphone",
+    "price": 699,
+    "category": "Electronics",
+    "variants": []
+  },
+  // Winter Jacket example (from 7 (1).png)
+  {
+    "name": "Winter Jacket",
+    "price": 200,
+    "category": "Apparel",
+    "variants": [
+      { "color": "Black", "size": "S", "stock": 8 },
+      { "color": "Gray", "size": "M", "stock": 12 }
+    ]
+  }
+]);
+
+db.products.find({})
+
+db.products.find({ "category": "Footwear" })
+
+db.products.find(
+  { "name": "Running Shoes", "variants.color": "Blue" }, // Filter product and check for variant existence
+  { 
+    "name": 1, 
+    "price": 1,
+    "variants": { 
+      $elemMatch: { "color": "Blue" } // Project only the matching variant object
+    }
+  }
+)
