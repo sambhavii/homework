@@ -1,0 +1,193 @@
+// app.js - Student Management System using MVC principles in a single file
+
+// --- SETUP AND CONFIGURATION ---
+const express = require('express');
+const mongoose = require('mongoose');
+
+// Set a default port and the MongoDB connection URI
+const PORT = process.env.PORT || 3000;
+// IMPORTANT: Replace 'mongodb://127.0.0.1:27017/studentdb' with your actual MongoDB URI.
+const MONGODB_URI = 'mongodb://127.0.0.1:27017/studentmanagement_db';
+
+// --- DATABASE CONNECTION ---
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ MongoDB connected successfully!'))
+  .catch(err => {
+    console.error('❌ MongoDB connection error. Please ensure MongoDB is running:', err.message);
+    process.exit(1); // Exit the process if the connection fails
+  });
+
+
+// =================================================================
+// --- 1. MODEL (M) ---
+// Defines the structure and constraints for the Student data.
+// =================================================================
+
+const StudentSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Student name is required.'],
+    trim: true,
+    minlength: 2
+  },
+  age: {
+    type: Number,
+    required: [true, 'Student age is required.'],
+    min: [16, 'Age must be at least 16 to enroll.']
+  },
+  course: {
+    type: String,
+    required: [true, 'Course name is required.'],
+    trim: true,
+  }
+}, {
+  // Adds 'createdAt' and 'updatedAt' timestamps automatically
+  timestamps: true
+});
+
+const Student = mongoose.model('Student', StudentSchema);
+
+
+// =================================================================
+// --- 2. CONTROLLER (C) ---
+// Contains the logic for handling requests and interacting with the Model.
+// =================================================================
+
+const studentController = {
+
+  // POST /students - Create a new student
+  createStudent: async (req, res) => {
+    try {
+      const student = new Student(req.body);
+      await student.save();
+      // Responds with 201 Created and the new student object
+      res.status(201).json(student);
+    } catch (error) {
+      // Handle validation errors (e.g., missing required fields)
+      res.status(400).json({ message: 'Failed to create student', error: error.message });
+    }
+  },
+
+  // GET /students - Retrieve all students
+  getAllStudents: async (req, res) => {
+    try {
+      const students = await Student.find({});
+      // Responds with 200 OK and an array of student objects
+      res.status(200).json(students);
+    } catch (error) {
+      res.status(500).json({ message: 'Error fetching students', error: error.message });
+    }
+  },
+
+  // GET /students/:id - Retrieve a single student by ID
+  getStudentById: async (req, res) => {
+    try {
+      const student = await Student.findById(req.params.id);
+      if (!student) {
+        return res.status(404).json({ message: 'Student not found with that ID' });
+      }
+      res.status(200).json(student);
+    } catch (error) {
+      // Handle invalid ID format (e.g., not a valid MongoDB ObjectID)
+      res.status(400).json({ message: 'Invalid student ID format', error: error.message });
+    }
+  },
+
+  // PUT /students/:id - Update a student by ID
+  updateStudent: async (req, res) => {
+    try {
+      const student = await Student.findByIdAndUpdate(req.params.id, req.body, {
+        new: true, // Returns the updated document
+        runValidators: true // Ensures schema validation runs on update
+      });
+      if (!student) {
+        return res.status(404).json({ message: 'Student not found with that ID' });
+      }
+      res.status(200).json(student);
+    } catch (error) {
+      // Handle validation or update errors
+      res.status(400).json({ message: 'Failed to update student', error: error.message });
+    }
+  },
+
+  // DELETE /students/:id - Delete a student by ID
+  deleteStudent: async (req, res) => {
+    try {
+      const student = await Student.findByIdAndDelete(req.params.id);
+      if (!student) {
+        return res.status(404).json({ message: 'Student not found with that ID' });
+      }
+      // Respond with a success message and the deleted object
+      res.status(200).json({
+        message: 'Student deleted successfully.',
+        student: student
+      });
+    } catch (error) {
+      res.status(500).json({ message: 'Error deleting student', error: error.message });
+    }
+  }
+};
+
+
+// =================================================================
+// --- 3. ROUTES (R) ---
+// Defines API endpoints and links them to the Controller methods.
+// =================================================================
+
+const router = express.Router();
+
+// Routes for base collection operations
+router.route('/')
+  .post(studentController.createStudent) // Handles POST requests to /students
+  .get(studentController.getAllStudents);  // Handles GET requests to /students
+
+// Routes for specific document operations (requires ID)
+router.route('/:id')
+  .get(studentController.getStudentById)  // Handles GET requests to /students/:id
+  .put(studentController.updateStudent)   // Handles PUT requests to /students/:id
+  .delete(studentController.deleteStudent); // Handles DELETE requests to /students/:id
+
+
+// =================================================================
+// --- EXPRESS APPLICATION INITIALIZATION ---
+// =================================================================
+
+const app = express();
+
+// Middleware to parse incoming JSON payloads
+app.use(express.json());
+
+// Simple welcome message for the root URL
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>Student Management System API</h1>
+    <p>API Status: Running</p>
+    <p>Endpoints:</p>
+    <ul>
+      <li><strong>POST /students</strong>: Create a new student (requires JSON body: {name, age, course})</li>
+      <li><strong>GET /students</strong>: Get all students</li>
+      <li><strong>GET /students/:id</strong>: Get a student by ID</li>
+      <li><strong>PUT /students/:id</strong>: Update a student by ID</li>
+      <li><strong>DELETE /students/:id</strong>: Delete a student by ID</li>
+    </ul>
+  `);
+});
+
+// Mount the router middleware at the /students path
+app.use('/students', router);
+
+
+// --- SERVER START ---
+app.listen(PORT, () => {
+  console.log(`🚀 Server started successfully on port ${PORT}`);
+  console.log(`Access the application at http://localhost:${PORT}`);
+  console.log(`Test API endpoints (e.g., using Postman or cURL) at http://localhost:${PORT}/students`);
+});
+
+// Handle graceful shutdown (optional but good practice)
+process.on('SIGINT', async () => {
+    console.log('\nServer shutting down...');
+    await mongoose.disconnect();
+    console.log('MongoDB disconnected.');
+    process.exit(0);
+});
