@@ -1,0 +1,192 @@
+
+const express = require('express');
+const mongoose = require('mongoose');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// --- 1. Database Connection ---
+const MONGO_URI = 'mongodb://localhost:27017/productDB';
+
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('MongoDB connected successfully to:', MONGO_URI))
+    .catch(err => {
+        console.error('MongoDB connection error:', err);
+        // Exit process on failure (critical step for a server)
+        process.exit(1);
+    });
+
+// --- 2. Mongoose Schema and Model Definition ---
+
+const productSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: [true, 'Product name is required'],
+        trim: true,
+        unique: true
+    },
+    price: {
+        type: Number,
+        required: [true, 'Product price is required'],
+        min: [0, 'Price must be a non-negative number']
+    },
+    category: {
+        type: String,
+        required: [true, 'Product category is required'],
+        enum: ['Electronics', 'Accessories', 'Stationery', 'Home Goods', 'Apparel', 'Other'],
+        default: 'Other'
+    },
+    dateAdded: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+const Product = mongoose.model('Product', productSchema);
+
+// --- 3. Express Middleware ---
+
+// Middleware to parse JSON body requests
+app.use(express.json());
+
+// Simple logging middleware
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
+
+// --- 4. CRUD Routes Implementation ---
+
+/**
+ * POST /products - Create a new product
+ * Status: 201 Created
+ */
+app.post('/products', async (req, res) => {
+    try {
+        const product = new Product(req.body);
+        await product.save();
+        // Return 201 Created status
+        res.status(201).json(product);
+    } catch (error) {
+        // Handle Mongoose validation errors (e.g., missing fields, min/max violation)
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                error: 'Validation Failed', 
+                details: error.message 
+            });
+        }
+        // Handle unique constraint error
+        if (error.code === 11000) {
+            return res.status(400).json({ 
+                error: 'Duplicate Key Error', 
+                details: 'A product with this name already exists.' 
+            });
+        }
+        // Handle general server errors
+        console.error('Error creating product:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * GET /products - Retrieve all products
+ * Status: 200 OK
+ */
+app.get('/products', async (req, res) => {
+    try {
+        // Use .find() to get all documents. You can use .sort() here if needed.
+        const products = await Product.find().select('-__v'); // Exclude __v field
+        res.status(200).json(products);
+    } catch (error) {
+        console.error('Error fetching all products:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * GET /products/:id - Retrieve a single product by ID
+ * Status: 200 OK or 404 Not Found
+ */
+app.get('/products/:id', async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id).select('-__v');
+
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
+        res.status(200).json(product);
+    } catch (error) {
+        // Handle invalid ID format (e.g., not a 24-char hex string)
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: 'Invalid Product ID format' });
+        }
+        console.error('Error fetching product by ID:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * PUT /products/:id - Update a product by ID
+ * Status: 200 OK or 404 Not Found
+ */
+app.put('/products/:id', async (req, res) => {
+    try {
+        // Find by ID and update the document. The { new: true } option returns the updated document.
+        // { runValidators: true } ensures schema validation runs on the update.
+        const product = await Product.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true, runValidators: true }
+        ).select('-__v');
+
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
+
+        res.status(200).json(product);
+    } catch (error) {
+        // Handle Mongoose validation errors during update
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                error: 'Validation Failed on Update', 
+                details: error.message 
+            });
+        }
+        // Handle invalid ID format
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: 'Invalid Product ID format' });
+        }
+        console.error('Error updating product:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+/**
+ * DELETE /products/:id - Delete a product by ID
+ * Status: 200 OK or 404 Not Found
+ */
+app.delete('/products/:id', async (req, res) => {
+    try {
+        const product = await Product.findByIdAndDelete(req.params.id).select('-__v');
+
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
+
+        // Return the deleted product in the response body, as seen in the expected output
+        res.status(200).json({ message: 'Product deleted successfully', product: product });
+    } catch (error) {
+        // Handle invalid ID format
+        if (error.name === 'CastError') {
+            return res.status(400).json({ error: 'Invalid Product ID format' });
+        }
+        console.error('Error deleting product:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+// --- 5. Start Server ---
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`Access the API at http://localhost:${PORT}/products`);
+});
