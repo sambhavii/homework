@@ -1,0 +1,45 @@
+import React, { useEffect, useState } from "react";
+import "./App.css";
+
+function App() {
+  const [message, setMessage] = useState("Loading backend response...");
+  const [backendIP, setBackendIP] = useState(null);
+
+  useEffect(() => {
+    // Replace with your AWS ALB DNS or domain name
+    const API_URL = "http://your-alb-dns-name.amazonaws.com/api/message";
+
+    fetch(API_URL)
+      .then((res) => res.json())
+      .then((data) => {
+        setMessage(data.message);
+        setBackendIP(data.instance || "Unknown instance");
+      })
+      .catch(() => {
+        setMessage("❌ Could not connect to backend. Check API or ALB settings.");
+      });
+  }, []);
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>🌐 AWS Full Stack Deployment</h1>
+        <p>
+          This React app is deployed on an EC2 instance and communicates with a
+          backend Node.js API served through an AWS Application Load Balancer.
+        </p>
+        <div className="card">
+          <h3>Backend Response:</h3>
+          <p>{message}</p>
+          {backendIP && <p><strong>Served by Instance:</strong> {backendIP}</p>}
+        </div>
+        <p className="hint">
+          Refresh this page multiple times — the backend instance should change
+          if load balancing is working correctly.
+        </p>
+      </header>
+    </div>
+  );
+}
+
+export default App;
