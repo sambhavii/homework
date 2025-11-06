@@ -1,0 +1,178 @@
+// To run this server:
+// 1. Initialize a Node.js project: npm init -y
+// 2. Install dependencies: npm install express jsonwebtoken
+// 3. Save this code as app.js
+// 4. Run: node app.js (or nodemon app.js)
+
+const express = require('express');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+const PORT = 3001;
+const JWT_SECRET = 'your_super_secret_rbac_key'; // !!! CHANGE THIS IN PRODUCTION !!!
+
+// Middleware to parse incoming JSON request bodies
+app.use(express.json());
+
+// ====================================================================
+// HARDCODED USER DATA WITH ROLES
+// ====================================================================
+const USERS = [
+    { id: 101, username: 'admin', password: 'adminpassword', roles: ['Admin', 'Moderator', 'User'] },
+    { id: 102, username: 'mod', password: 'modpassword', roles: ['Moderator', 'User'] },
+    { id: 103, username: 'user', password: 'userpassword', roles: ['User'] },
+];
+
+// ====================================================================
+// 1. LOGIN ROUTE (ISSUES JWT with Role Payload)
+// ====================================================================
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+
+    // 1. Authenticate user credentials against the USERS list
+    const user = USERS.find(u => u.username === username && u.password === password);
+
+    if (!user) {
+        return res.status(401).json({ success: false, message: 'Authentication failed. Invalid credentials.' });
+    }
+
+    // 2. Credentials are valid, prepare the token payload
+    const payload = {
+        userId: user.id,
+        username: user.username,
+        roles: user.roles // CRITICAL: Include roles in the token
+    };
+
+    // 3. Sign the token
+    const token = jwt.sign(payload, JWT_SECRET, {
+        expiresIn: '1h' // Token expires in 1 hour
+    });
+
+    // 4. Return the token
+    res.json({
+        success: true,
+        message: `Login successful for ${user.username}. Role(s): ${user.roles.join(', ')}`,
+        token: token,
+        roles: user.roles
+    });
+});
+
+
+// ====================================================================
+// 2. JWT VERIFICATION MIDDLEWARE (Attaches req.user)
+// ====================================================================
+
+/**
+ * Middleware function to verify the JWT token and attach the decoded payload (including roles) to req.user.
+ */
+function verifyToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(403).json({ success: false, message: 'Access denied. Token format must be "Bearer <token>".' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            console.error("JWT Verification Error:", err.message);
+            return res.status(401).json({ success: false, message: 'Unauthorized. Invalid or expired token.' });
+        }
+        
+        req.user = decoded; 
+        next(); 
+    });
+}
+
+
+// ====================================================================
+// 3. ROLE AUTHORIZATION MIDDLEWARE (RBAC Logic)
+// ====================================================================
+
+/**
+ * Generates a middleware function that checks if the authenticated user has any of the allowed roles.
+ * @param {string[]} allowedRoles - An array of roles that are permitted to access the route.
+ */
+function checkRole(allowedRoles) {
+    return (req, res, next) => {
+        // req.user is guaranteed to be present and contain roles from the preceding verifyToken middleware
+        const userRoles = req.user.roles || [];
+
+        // Check if the user has AT LEAST ONE of the allowed roles
+        const hasRequiredRole = userRoles.some(role => allowedRoles.includes(role));
+
+        if (hasRequiredRole) {
+            next(); // User has sufficient role access
+        } else {
+            // Log the denied attempt (optional but good practice)
+            console.warn(`Access Denied for user ${req.user.username}. Required: ${allowedRoles.join(', ')} | User Roles: ${userRoles.join(', ')}`);
+            
+            // Send 403 Forbidden response
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Forbidden. You do not have the required role access for this resource.',
+                requiredRoles: allowedRoles,
+                yourRoles: userRoles
+            });
+        }
+    };
+}
+
+
+// ====================================================================
+// 4. PROTECTED ROUTES (Using RBAC Middleware)
+// ====================================================================
+
+// Route 1: Admin-Only Dashboard
+// Access: Only 'Admin'
+app.get('/api/admin/dashboard', verifyToken, checkRole(['Admin']), (req, res) => {
+    res.json({
+        success: true,
+        message: `ADMIN access granted. Welcome, ${req.user.username}.`,
+        privateData: 'Administrative reports and server control panel access.'
+    });
+});
+
+// Route 2: Moderator/Admin Management Panel
+// Access: 'Admin' or 'Moderator'
+app.get('/api/moderator/management', verifyToken, checkRole(['Admin', 'Moderator']), (req, res) => {
+    res.json({
+        success: true,
+        message: `MODERATOR/ADMIN access granted. Welcome, ${req.user.username}.`,
+        privateData: 'User flagging and content review tools.'
+    });
+});
+
+// Route 3: General User Profile
+// Access: 'User', 'Moderator', or 'Admin' (All authenticated users)
+app.get('/api/user/profile', verifyToken, checkRole(['Admin', 'Moderator', 'User']), (req, res) => {
+    res.json({
+        success: true,
+        message: `USER access granted. Welcome, ${req.user.username}.`,
+        profileData: { userId: req.user.userId, username: req.user.username, accountLevel: req.user.roles[0] }
+    });
+});
+
+
+// ====================================================================
+// 5. PUBLIC ROUTE
+// ====================================================================
+app.get('/api/public/status', (req, res) => {
+    res.json({ success: true, message: 'This public status route is always accessible.', status: 'OK' });
+});
+
+
+// Start the server
+const server = app.listen(PORT, () => {
+    console.log(`RBAC Auth Server running on http://localhost:${PORT}`);
+    console.log('\n--- RBAC Testing Instructions ---');
+    console.log('1. Log In to get tokens (use Postman/cURL):');
+    console.log('   - Admin: POST /api/login (Body: { "username": "admin", "password": "adminpassword" })');
+    console.log('   - Moderator: POST /api/login (Body: { "username": "mod", "password": "modpassword" })');
+    console.log('   - User: POST /api/login (Body: { "username": "user", "password": "userpassword" })');
+    console.log('\n2. Test Routes with Tokens: (Header: Authorization: Bearer <your_token>)');
+    console.log('   - /api/admin/dashboard (Should only work with Admin token)');
+    console.log('   - /api/moderator/management (Should work with Admin or Moderator token)');
+    console.log('   - /api/user/profile (Should work with any of the three tokens)');
+});
