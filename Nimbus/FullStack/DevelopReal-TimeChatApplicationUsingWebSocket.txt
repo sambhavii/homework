@@ -1,0 +1,195 @@
+import React, { useState, useEffect, useRef } from 'react';
+// NOTE: In a real React project, you would install the socket.io-client package:
+// npm install socket.io-client
+// import { io } from 'socket.io-client';
+
+// We simulate the import of the connection function for this environment.
+// For a live test, replace 'simulate_io' with the actual 'io' from 'socket.io-client'
+const socket = {
+    // Mock socket object to prevent crashing in environments without network access/package installation
+    on: (event: string, callback: (...args: any[]) => void) => {
+        // console.log(`Simulated listener registered for: ${event}`);
+    },
+    emit: (event: string, ...args: any[]) => {
+        console.log(`Simulated emit: ${event}`, args);
+    },
+    connect: () => { 
+        console.log("Simulated socket connect.");
+        // If connecting to a real server, uncomment the line below.
+        // return io('http://localhost:3001');
+        return socket; // Return self for chaining/mocking
+    },
+    disconnect: () => { 
+        console.log("Simulated socket disconnect.");
+    }
+};
+
+const CHAT_SERVER_URL = 'http://localhost:3001';
+
+interface Message {
+  id: string;
+  user: string;
+  text: string;
+  timestamp: string;
+}
+
+const App = () => {
+  const [isConnected, setIsConnected] = useState(false);
+  const [username, setUsername] = useState('');
+  const [isNameSet, setIsNameSet] = useState(false);
+  const [messageInput, setMessageInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Scrolls to the latest message whenever the messages array updates
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Handle Socket.io connection and listeners
+  useEffect(() => {
+    // Attempt to connect to the actual server if io is available
+    const activeSocket = socket.connect(CHAT_SERVER_URL);
+
+    // Event listeners
+    activeSocket.on('connect', () => {
+      setIsConnected(true);
+      console.log('Connected to server.');
+    });
+
+    activeSocket.on('disconnect', () => {
+      setIsConnected(false);
+      console.log('Disconnected from server.');
+    });
+
+    activeSocket.on('message', (msg: Message) => {
+      setMessages((prevMessages) => [...prevMessages, msg]);
+    });
+
+    // Cleanup function runs when component unmounts
+    return () => {
+      activeSocket.disconnect();
+    };
+  }, [isNameSet]); // Reconnect when the name is set to register as a user
+
+  const handleSetUsername = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username.trim()) {
+      setIsNameSet(true);
+      // In a real app, you might emit a 'userJoined' event here
+    }
+  };
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (messageInput.trim() && isConnected && isNameSet) {
+      const msg: Message = {
+        id: Date.now().toString(),
+        user: username,
+        text: messageInput.trim(),
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      
+      // Emit the message to the server
+      socket.emit('sendMessage', msg);
+      
+      setMessageInput('');
+    }
+  };
+
+  // --- UI Rendering ---
+
+  // User Name Setup Screen
+  if (!isNameSet) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 font-sans p-8">
+        <form onSubmit={handleSetUsername} className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-700">
+          <h1 className="text-3xl font-bold text-white mb-6 text-center">Join Chat Room</h1>
+          <p className="text-gray-400 mb-4 text-sm">Enter a username to start chatting.</p>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Your Username"
+            className="w-full p-3 mb-4 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+            maxLength={20}
+          />
+          <button
+            type="submit"
+            className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition duration-150 disabled:bg-gray-600"
+            disabled={!username.trim()}
+          >
+            Enter Chat
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  // Main Chat Interface
+  return (
+    <div className="min-h-screen bg-gray-900 font-sans p-4 md:p-8 flex flex-col">
+      <header className="mb-4 p-3 bg-gray-800 rounded-xl shadow-xl flex justify-between items-center border-b-4 border-blue-600">
+        <h1 className="text-3xl font-extrabold text-white tracking-tight">
+          Real-Time Socket Chat
+        </h1>
+        <div className="text-right">
+            <p className="text-sm font-semibold text-gray-300">Logged in as: <span className="text-blue-400">{username}</span></p>
+            <span className={`text-xs font-medium px-2 py-1 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'} text-white`}>
+                {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+        </div>
+      </header>
+
+      <div className="flex-grow bg-gray-800 rounded-xl shadow-2xl p-4 flex flex-col max-h-[75vh]">
+        {/* Message Display Area */}
+        <div className="flex-grow overflow-y-auto space-y-4 p-2 custom-scrollbar">
+          {messages.map((msg, index) => (
+            <div key={msg.id} className={`flex ${msg.user === username ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-xl shadow-md ${
+                msg.user === username 
+                  ? 'bg-blue-600 text-white rounded-br-none' 
+                  : 'bg-gray-700 text-gray-200 rounded-tl-none'
+              }`}>
+                <p className="font-bold text-sm mb-1">{msg.user}</p>
+                <p className="text-base break-words">{msg.text}</p>
+                <p className={`text-xs mt-1 ${msg.user === username ? 'text-blue-200' : 'text-gray-400'} text-right`}>{msg.timestamp}</p>
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Message Input Area */}
+        <form onSubmit={handleSendMessage} className="mt-4 flex space-x-3 border-t border-gray-700 pt-4">
+          <input
+            type="text"
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-grow p-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!isConnected}
+            required
+          />
+          <button
+            type="submit"
+            className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition duration-150 disabled:bg-gray-600 flex items-center"
+            disabled={!isConnected || !messageInput.trim()}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.5l1-7.5c.015-.11.082-.202.177-.267.095-.064.21-.097.325-.094h.086c.115-.003.23.03.325.094.095.065.162.157.177.267l1 7.5a1 1 0 00.999.851l5 1.429a1 1 0 001.169-1.409l-7-14z" />
+            </svg>
+            Send
+          </button>
+        </form>
+      </div>
+      <footer className="mt-4 text-center text-xs text-gray-600">
+        To fully test real-time functionality, ensure your Node.js server (`server.js`) is running locally and open this application in multiple browser tabs.
+      </footer>
+    </div>
+  );
+};
+
+export default App;
