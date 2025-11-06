@@ -1,0 +1,128 @@
+import React, { useState } from 'react';
+
+// Main component for the Login Form
+const App = () => {
+  // 1. State management for form inputs
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  
+  // 2. State management for validation and submission message
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
+
+  /**
+   * Handles the form submission event.
+   * Logs the data to the console and handles basic validation.
+   */
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault(); // Prevent the default form submission (page reload)
+    
+    setValidationError(null);
+    setSubmissionMessage(null);
+
+    // Basic Validation: check if fields are empty
+    if (!username.trim() || !password.trim()) {
+      setValidationError('Please enter both a username and a password.');
+      return;
+    }
+
+    // 3. Log data to console (Task requirement)
+    console.log('--- Form Submission Data ---');
+    console.log(`Username: ${username}`);
+    console.log(`Password: ${password}`);
+    console.log('--------------------------');
+
+    // Display success message and clear fields
+    setSubmissionMessage('Login successful! Check the console for the submitted data.');
+    setUsername('');
+    setPassword('');
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 font-sans p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-gray-800 p-8 md:p-10 rounded-xl shadow-2xl border border-gray-700">
+          <h1 className="text-3xl font-bold text-white mb-6 text-center">
+            User Login
+          </h1>
+
+          {/* Validation Error Message */}
+          {validationError && (
+            <div className="p-3 mb-4 text-sm font-medium text-red-100 bg-red-700 rounded-lg" role="alert">
+              {validationError}
+            </div>
+          )}
+
+          {/* Submission Success Message */}
+          {submissionMessage && (
+            <div className="p-3 mb-4 text-sm font-medium text-green-100 bg-green-700 rounded-lg" role="alert">
+              {submissionMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            {/* Username Field */}
+            <div className="mb-6">
+              <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
+                Username
+              </label>
+              <input
+                type="text"
+                id="username"
+                value={username}
+                // Update state in real time
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  // Clear messages on change
+                  setValidationError(null);
+                  setSubmissionMessage(null);
+                }}
+                className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150"
+                placeholder="Enter your username"
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            {/* Password Field */}
+            <div className="mb-8">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                value={password}
+                // Update state in real time
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  // Clear messages on change
+                  setValidationError(null);
+                  setSubmissionMessage(null);
+                }}
+                className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150"
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
+            >
+              Log In
+            </button>
+          </form>
+        </div>
+        
+        <p className="text-center text-gray-500 text-sm mt-4">
+          Open your browser's console (F12) to see the form data after submission.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default App;
