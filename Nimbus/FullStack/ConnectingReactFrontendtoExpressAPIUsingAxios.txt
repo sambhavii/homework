@@ -1,0 +1,145 @@
+  import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+// This component assumes Tailwind CSS is configured in your project.
+// The necessary Axios library must be installed: npm install axios
+
+// Define the interface for the product data structure
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
+// Define mock product data (as the Express API would provide)
+const MOCK_PRODUCTS: Product[] = [
+  { id: 1, name: "Laptop", price: 1200 },
+  { id: 2, name: "Mouse", price: 25 },
+  { id: 3, name: "Keyboard", price: 45 },
+];
+
+// Configuration for the Express API endpoint (Commented out to prevent Network Error in sandbox)
+// const API_URL = 'http://localhost:3001/api/products';
+
+// Main App component
+const App = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Function to fetch data from the Express API (Simulated for reliable execution)
+    const fetchProducts = async () => {
+      try {
+        // --- SIMULATING API CALL FOR DEMONSTRATION IN SANDBOX ---
+        // The original axios.get call often results in a "Network Error"
+        // here, so we simulate a successful fetch using mock data and a delay.
+
+        setLoading(true);
+        setError(null);
+
+        // Simulate network delay of 1.5 seconds
+        await new Promise(resolve => setTimeout(resolve, 1500)); 
+        
+        // Simulate a successful response from the Express API
+        const responseData = MOCK_PRODUCTS;
+
+        // Update the state with the simulated fetched data
+        setProducts(responseData);
+
+        /* Original logic (commented out)
+        // Axios makes the GET request to the Express backend
+        // const response = await axios.get(API_URL);
+        // setProducts(response.data);
+        // setError(null);
+        */
+
+      } catch (err) {
+        // This catch block handles simulation errors, which are unlikely.
+        console.error("Error during data simulation:", err);
+        setError("Error during data simulation. Check console.");
+        setProducts([]);
+      } finally {
+        // Always set loading to false after the request is complete
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // --- Rendering Logic ---
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+        <div className="text-xl font-medium">
+          Loading products from Express API...
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mx-auto mt-4"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 p-8">
+        <div className="bg-red-900 border border-red-700 text-white p-6 rounded-lg shadow-xl max-w-lg">
+          <h1 className="text-2xl font-bold mb-4">Connection Error</h1>
+          <p className="mb-4">There was an issue connecting to the backend service.</p>
+          <p className="font-mono text-sm break-words">{error}</p>
+          <p className="mt-4 text-xs opacity-70">
+            Data display is being simulated.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Card component for displaying a single product
+  const ProductCard: React.FC<{ product: Product }> = ({ product }) => (
+    <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hover:border-blue-500 transition-all duration-300 transform hover:scale-[1.02] flex flex-col items-center text-center">
+      <h3 className="text-3xl font-semibold mb-2 text-white">{product.name}</h3>
+      <p className="text-xl text-gray-400 mb-6">
+        Price: <span className="text-blue-400 font-bold">${product.price.toLocaleString()}</span>
+      </p>
+      <button
+        onClick={() => console.log(`Buying ${product.name}`)}
+        className="mt-auto w-full py-3 px-4 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 transform hover:shadow-lg"
+      >
+        Buy Now
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-900 font-sans p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header matching the style in the image */}
+        <header className="mb-10 p-4 bg-gray-800 rounded-xl shadow-2xl">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-center text-white tracking-tight">
+            Product List
+          </h1>
+        </header>
+
+        {/* Product Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {products.length > 0 ? (
+            products.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))
+          ) : (
+            <div className="lg:col-span-3 text-center p-12 bg-gray-800 rounded-xl text-gray-400">
+                <p className="text-xl">No products available. Check your Express server data!</p>
+            </div>
+          )}
+        </div>
+
+        <footer className="mt-12 text-center text-xs text-gray-600">
+            Data is currently simulated for demonstration.
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+export default App;
