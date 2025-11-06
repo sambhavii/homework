@@ -1,0 +1,25 @@
+import React from "react";
+import "./App.css";
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>🚀 GitHub Actions CI/CD Demo</h1>
+        <p>
+          This React app is automatically <strong>tested, built,</strong> and{" "}
+          <strong>deployed</strong> using <span style={{ color: "#2088FF" }}>GitHub Actions</span>.
+        </p>
+        <p>
+          ✅ Continuous Integration (CI): Runs <code>npm test</code> and <code>npm run build</code> on each push. <br />
+          🌐 Continuous Deployment (CD): Automatically deploys to GitHub Pages / Netlify / S3.
+        </p>
+        <p style={{ marginTop: "20px", fontStyle: "italic" }}>
+          Edit <code>src/App.jsx</code> and push changes to see the pipeline in action.
+        </p>
+      </header>
+    </div>
+  );
+}
+
+export default App;
