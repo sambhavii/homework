@@ -1,0 +1,22 @@
+import React from "react";
+import "./App.css";
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>🚀 React Docker Demo</h1>
+        <p>
+          This React app is running inside a Docker container using a
+          <strong> multi-stage build</strong>!
+        </p>
+        <p>
+          Served by <span style={{ color: "#00aced" }}>Nginx</span> in
+          production.
+        </p>
+      </header>
+    </div>
+  );
+}
+
+export default App;
