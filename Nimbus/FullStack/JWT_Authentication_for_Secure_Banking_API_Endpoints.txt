@@ -1,0 +1,132 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const jwt = require('jsonwebtoken');
+
+const app = express();
+const PORT = 3000;
+// 🔑 Use a strong, environment variable-stored secret in production.
+const JWT_SECRET = 'your_super_secure_secret_key'; 
+
+// Middleware to parse incoming JSON request bodies
+app.use(bodyParser.json());
+
+// --- 1. Data and State ---
+
+// Hardcoded user data for login
+const users = {
+    'user1': { password: 'password123', id: 1 }
+};
+
+// In-memory account state (starting with $1000 for 'user1')
+let accounts = {
+    'user1': { balance: 1000 } 
+};
+
+// --- 2. JWT Authentication Middleware ---
+
+const authenticateToken = (req, res, next) => {
+    // Get the Authorization header (e.g., "Bearer TOKEN")
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token == null) {
+        // 401: Unauthorized (token missing)
+        return res.status(401).json({ message: "Missing token. Access denied." });
+    }
+
+    // Verify and decode the token
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            // 403: Forbidden (token invalid or expired)
+            return res.status(403).json({ message: "Invalid or expired token" });
+        }
+        
+        // Attach the user payload (username, id) to the request
+        req.user = user;
+        next(); // Move to the route handler
+    });
+};
+
+// --- 3. Public Login Endpoint ---
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    const user = users[username];
+    if (!user || user.password !== password) {
+        return res.status(401).json({ message: "Invalid username or password" });
+    }
+
+    // Create a token payload
+    const payload = { username: username, id: user.id };
+
+    // Sign the token (expires in 1 hour)
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+
+    res.json({ token: token });
+});
+
+// --- 4. Protected Banking Endpoints ---
+
+// GET /balance: View current balance
+app.get('/balance', authenticateToken, (req, res) => {
+    const username = req.user.username;
+    const balance = accounts[username].balance;
+
+    res.status(200).json({ balance: balance });
+});
+
+// POST /deposit: Deposit money
+app.post('/deposit', authenticateToken, (req, res) => {
+    const { amount } = req.body;
+    const username = req.user.username;
+
+    const depositAmount = parseFloat(amount);
+    if (isNaN(depositAmount) || depositAmount <= 0) {
+        return res.status(400).json({ message: "Invalid deposit amount." });
+    }
+
+    // Update balance
+    accounts[username].balance += depositAmount;
+    const newBalance = accounts[username].balance;
+
+    res.status(200).json({
+        message: `Deposited $${depositAmount}`,
+        newBalance: newBalance
+    });
+});
+
+// POST /withdraw: Withdraw money
+app.post('/withdraw', authenticateToken, (req, res) => {
+    const { amount } = req.body;
+    const username = req.user.username;
+    const currentBalance = accounts[username].balance;
+
+    const withdrawalAmount = parseFloat(amount);
+
+    if (isNaN(withdrawalAmount) || withdrawalAmount <= 0) {
+        return res.status(400).json({ message: "Invalid withdrawal amount." });
+    }
+
+    // Handle insufficient balance error
+    if (currentBalance < withdrawalAmount) {
+        // 400: Bad Request (Insufficient Balance)
+        return res.status(400).json({ message: "Insufficient balance for this withdrawal." });
+    }
+
+    // Update balance
+    accounts[username].balance -= withdrawalAmount;
+    const newBalance = accounts[username].balance;
+
+    res.status(200).json({
+        message: `Withdrew $${withdrawalAmount}`,
+        newBalance: newBalance
+    });
+});
+
+// --- 5. Start Server ---
+
+app.listen(PORT, () => {
+    console.log(`\nSecure Banking API running on http://localhost:${PORT}`);
+    console.log(`Test login with: POST /login {"username": "user1", "password": "password123"}`);
+});
