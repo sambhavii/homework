@@ -1,0 +1,331 @@
+  import React, { useState, useEffect, useReducer, createContext, useContext } from 'react';
+import axios from 'axios'; 
+// NOTE: We cannot use Redux Toolkit or react-redux imports in this single file.
+// We are simulating the Redux pattern (Slice, Store, Provider, Hooks) using 
+// React's useReducer and Context API to meet the learning objective.
+
+// ====================================================================
+// 1. TYPES AND MOCK DATA
+// ====================================================================
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+}
+
+interface CartItem extends Product {
+  quantity: number;
+}
+
+interface CartState {
+  items: CartItem[];
+}
+
+// Mock Product Data (Simulated API response)
+const MOCK_PRODUCTS: Product[] = [
+  { id: 1, name: "Laptop", price: 1200 },
+  { id: 2, name: "Mouse", price: 25 },
+  { id: 3, name: "Keyboard", price: 45 },
+  { id: 4, name: "Monitor", price: 350 },
+  { id: 5, name: "Webcam", price: 50 },
+];
+
+// Initial State (Simulates the initial Redux state)
+const initialCartState: CartState = { items: [] };
+
+// ====================================================================
+// 2. REDUX SLICE SIMULATION (Reducer Logic)
+// ====================================================================
+
+// Action Types (Simulates action creators from a slice)
+type CartAction = 
+  | { type: 'cart/addItem', payload: Product }
+  | { type: 'cart/removeItem', payload: number } // payload is product ID
+  | { type: 'cart/updateQuantity', payload: { id: number, quantity: number } };
+
+/**
+ * Simulates the cartSlice reducer logic.
+ */
+const cartReducer = (state: CartState, action: CartAction): CartState => {
+  switch (action.type) {
+    case 'cart/addItem': {
+      const productToAdd = action.payload;
+      const existingItem = state.items.find(item => item.id === productToAdd.id);
+
+      if (existingItem) {
+        return {
+          ...state,
+          items: state.items.map(item =>
+            item.id === productToAdd.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          ),
+        };
+      } else {
+        return {
+          ...state,
+          items: [...state.items, { ...productToAdd, quantity: 1 }],
+        };
+      }
+    }
+    case 'cart/removeItem': {
+      // Remove item entirely by ID
+      return {
+        ...state,
+        items: state.items.filter(item => item.id !== action.payload),
+      };
+    }
+    case 'cart/updateQuantity': {
+      // Update quantity and remove if quantity drops to 0
+      return {
+        ...state,
+        items: state.items
+          .map(item =>
+            item.id === action.payload.id
+              ? { ...item, quantity: action.payload.quantity }
+              : item
+          )
+          .filter(item => item.quantity > 0),
+      };
+    }
+    default:
+      return state;
+  }
+};
+
+// ====================================================================
+// 3. REDUX STORE/HOOKS SIMULATION (Context and Custom Hooks)
+// ====================================================================
+
+// Context (Simulates the Redux Store content)
+const CartContext = createContext<{ state: CartState; dispatch: React.Dispatch<CartAction> } | undefined>(undefined);
+
+/**
+ * Simulates the Redux Provider component.
+ */
+const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, dispatch] = useReducer(cartReducer, initialCartState);
+  return (
+    <CartContext.Provider value={{ state, dispatch }}>
+      {children}
+    </CartContext.Provider>
+  );
+};
+
+/**
+ * Simulates the useDispatch hook.
+ */
+const useCartDispatch = () => {
+  const context = useContext(CartContext);
+  if (context === undefined) {
+    throw new Error('useCartDispatch must be used within a CartProvider');
+  }
+  return context.dispatch;
+};
+
+/**
+ * Simulates the useSelector hook.
+ */
+const useCartSelector = <T,>(selector: (state: CartState) => T): T => {
+  const context = useContext(CartContext);
+  if (context === undefined) {
+    throw new Error('useCartSelector must be used within a CartProvider');
+  }
+  // The magic happens here: runs the selector function on the current state
+  return selector(context.state);
+};
+
+// ====================================================================
+// 4. COMPONENTS
+// ====================================================================
+
+/**
+ * Displays a single product and allows adding it to the cart.
+ */
+const ProductCard: React.FC<{ product: Product }> = ({ product }) => {
+  const dispatch = useCartDispatch();
+
+  const handleAddToCart = () => {
+    dispatch({ type: 'cart/addItem', payload: product });
+  };
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hover:border-blue-500 transition-all duration-300 flex flex-col items-center text-center h-full">
+      <h3 className="text-2xl font-semibold mb-2 text-white">{product.name}</h3>
+      <p className="text-lg text-gray-400 mb-6">
+        Price: <span className="text-blue-400 font-bold">${product.price.toLocaleString()}</span>
+      </p>
+      <button
+        onClick={handleAddToCart}
+        className="mt-auto w-full py-3 px-4 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-150"
+      >
+        Add to Cart
+      </button>
+    </div>
+  );
+};
+
+/**
+ * Fetches and displays the list of products.
+ */
+const ProductList: React.FC = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetching logic (simulated)
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        // Simulate network delay and successful fetch
+        await new Promise(resolve => setTimeout(resolve, 800)); 
+        setProducts(MOCK_PRODUCTS);
+      } catch (err) {
+        setError("Error during product load simulation.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  if (loading) return <div className="text-center py-8 text-white">Loading products...</div>;
+  if (error) return <div className="text-center py-8 text-red-400">Error: {error}</div>;
+
+  return (
+    <div className="p-4">
+      <h2 className="text-3xl font-bold mb-6 text-white border-b border-gray-700 pb-3">Available Products</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {products.map(product => (
+          <ProductCard key={product.id} product={product} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Displays and allows management of the shopping cart using global Redux state.
+ */
+const ShoppingCart: React.FC = () => {
+  // Simulates useSelector to get the cart items from the global state
+  const items = useCartSelector(state => state.items);
+  // Simulates useDispatch to modify the global state
+  const dispatch = useCartDispatch();
+
+  const handleRemove = (id: number) => {
+    dispatch({ type: 'cart/removeItem', payload: id });
+  };
+
+  const handleQuantityChange = (id: number, newQuantity: number) => {
+    dispatch({ type: 'cart/updateQuantity', payload: { id, quantity: newQuantity } });
+  };
+
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-xl shadow-2xl h-full flex flex-col">
+      <h2 className="text-3xl font-bold mb-6 text-white border-b border-gray-700 pb-3">Shopping Cart ({items.length})</h2>
+      
+      <div className="flex-grow space-y-4 overflow-y-auto pr-2">
+        {items.length === 0 ? (
+          <p className="text-gray-400 pt-4 text-center">Your cart is empty. Add some products!</p>
+        ) : (
+          items.map(item => (
+            <div key={item.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg shadow-md">
+              <div className="flex-1 min-w-0">
+                <p className="text-lg font-semibold text-white truncate">{item.name}</p>
+                <p className="text-sm text-gray-400">${item.price.toFixed(2)} each</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  min="1"
+                  value={item.quantity}
+                  onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value))}
+                  className="w-16 p-1 text-center bg-gray-600 text-white rounded-md border border-gray-500 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                />
+                <button
+                  onClick={() => handleRemove(item.id)}
+                  className="text-red-400 hover:text-red-500 transition duration-150 p-2 rounded-full hover:bg-gray-600"
+                  aria-label={`Remove ${item.name}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-gray-600">
+        <div className="flex justify-between items-center text-xl font-bold text-white">
+          <span>Cart Total:</span>
+          <span className="text-blue-400">${total.toFixed(2)}</span>
+        </div>
+        <button
+          className="mt-4 w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-150 disabled:bg-gray-600"
+          disabled={items.length === 0}
+        >
+          Checkout
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ====================================================================
+// 5. MAIN APP WRAPPER (Includes Provider)
+// ====================================================================
+
+/**
+ * Main application component responsible for layout and providing the Redux context.
+ */
+const App = () => {
+  return (
+    <div className="min-h-screen bg-gray-900 font-sans p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <header className="mb-8 p-4 bg-gray-800 rounded-xl shadow-2xl">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-center text-white tracking-tight">
+            Redux Toolkit Shopping Cart (Simulated)
+          </h1>
+          <p className="text-center text-gray-400 mt-2">Global state managed by a Redux-style slice and provider pattern.</p>
+        </header>
+
+        {/* Main Content: Products and Cart */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+          {/* Product List (Takes 2/3 width on large screens) */}
+          <div className="lg:col-span-2">
+            <ProductList />
+          </div>
+
+          {/* Shopping Cart (Takes 1/3 width on large screens) */}
+          <div className="lg:col-span-1 min-h-[50vh]">
+            <ShoppingCart />
+          </div>
+        </div>
+
+        <footer className="mt-12 text-center text-xs text-gray-600">
+          State management pattern is implemented using React Context and useReducer to simulate Redux Toolkit functionality in a single-file environment.
+        </footer>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Component that wraps the App in the necessary context provider.
+ * This is equivalent to calling ReactDOM.render(<Provider store={store}><App /></Provider>);
+ */
+const AppWrapper = () => (
+  <CartProvider>
+    <App />
+  </CartProvider>
+);
+
+export default AppWrapper;
